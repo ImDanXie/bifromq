@@ -29,7 +29,6 @@ import static org.apache.bifromq.dist.worker.Comparators.RouteMatcherComparator;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildGroupMatchRoute;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildMatchRoute;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildNormalMatchRoute;
-import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.tenantBeginKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toGroupRouteKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toNormalRouteKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toReceiverUrl;
@@ -108,6 +107,8 @@ class DistWorkerCoProc implements IKVRangeCoProc {
     private final ITenantsStats tenantsState;
     private final IDeliverExecutorGroup deliverExecutorGroup;
     private final ISubscriptionCleaner subscriptionChecker;
+    /** Per-range GC session counter used to rotate the sampling phase under step>1. */
+    private final java.util.concurrent.atomic.AtomicInteger gcSessionSeq = new java.util.concurrent.atomic.AtomicInteger();
     private transient Fact fact;
     private transient Boundary boundary;
 
@@ -588,6 +589,19 @@ class DistWorkerCoProc implements IKVRangeCoProc {
                     .setRemoveSuccess(0)
                     .setWrapped(true)
                     .build());
+            }
+
+            // Rotate the sampling phase across sessions. The cleaner resumes each session at the
+            // key where the previous one stopped; on wrap that key is the session's own start key, so with a
+            // fixed step the same modulo class was inspected forever while the rest of the route table was
+            // never scanned (measured: 50% of routes permanently skipped at step 2). Advancing a per-session
+            // phase offset guarantees every residue class is visited over consecutive sessions.
+            int phase = stepUsed > 1 ? Math.floorMod(gcSessionSeq.getAndIncrement(), stepUsed) : 0;
+            while (phase-- > 0) {
+                itr.next();
+                if (!itr.isValid()) {
+                    break; // tail reached; the scan loop below wraps to the first key
+                }
             }
 
             AtomicInteger inspectedCount = new AtomicInteger();
