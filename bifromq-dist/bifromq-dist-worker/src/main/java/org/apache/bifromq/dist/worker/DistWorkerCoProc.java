@@ -29,6 +29,7 @@ import static org.apache.bifromq.dist.worker.Comparators.RouteMatcherComparator;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildGroupMatchRoute;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildMatchRoute;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.buildNormalMatchRoute;
+import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.tenantBeginKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toGroupRouteKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toNormalRouteKey;
 import static org.apache.bifromq.dist.worker.schema.KVSchemaUtil.toReceiverUrl;
